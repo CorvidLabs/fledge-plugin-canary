@@ -33,11 +33,12 @@ HAS_METADATA=$(echo "$CAPS" | jq -r '.metadata // false')
 SECTION="all"
 ARGS=$(echo "$INIT" | jq -r '.args[0] // ""')
 case "$ARGS" in
-  metadata|exec|store|expose) SECTION="$ARGS" ;;
+  metadata|exec|store|expose|baseline) SECTION="$ARGS" ;;
   *) SECTION="all" ;;
 esac
 
-send "{\"type\":\"output\",\"text\":\"fledge-plugin-canary v0.1.0\\n\"}"
+VERSION=$(echo "$INIT" | jq -r '.plugin.version // "unknown"')
+send "{\"type\":\"output\",\"text\":\"fledge-plugin-canary v$VERSION\\n\"}"
 send "{\"type\":\"output\",\"text\":\"Capabilities granted: exec=$HAS_EXEC store=$HAS_STORE metadata=$HAS_METADATA\\n\"}"
 send "{\"type\":\"output\",\"text\":\"Running section: $SECTION\\n\"}"
 
@@ -461,16 +462,120 @@ run_exposure_report() {
   send "{\"type\":\"output\",\"text\":\"\\n  BOTTOM LINE: exec = full user access. Only install trusted plugins.\\n\"}"
 }
 
+# ── Baseline Tests (no RPC, direct process access) ───────────────────
+run_baseline_tests() {
+  header "BASELINE TESTS — What ANY plugin gets without capabilities"
+  send "{\"type\":\"output\",\"text\":\"  These tests use direct bash access, NOT the fledge-v1 RPC.\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"  Capabilities only gate protocol responses — the process itself is unsandboxed.\\n\\n\"}"
+
+  # Test 1: Init message leaks project context
+  project_name=$(echo "$INIT" | jq -r '.project.name // empty')
+  project_root=$(echo "$INIT" | jq -r '.project.root // empty')
+  git_branch=$(echo "$INIT" | jq -r '.project.git.branch // empty')
+  git_remote=$(echo "$INIT" | jq -r '.project.git.remote_url // empty')
+
+  send "{\"type\":\"output\",\"text\":\"  ── Init message data (always sent, no capability needed) ──\\n\"}"
+  if [ -n "$project_name" ]; then
+    send "{\"type\":\"output\",\"text\":\"    project.name   = $project_name\\n\"}"
+  fi
+  if [ -n "$project_root" ]; then
+    send "{\"type\":\"output\",\"text\":\"    project.root   = $project_root\\n\"}"
+    pass "Init message exposes project root path"
+  else
+    pass "No project root in init (unexpected)"
+  fi
+  if [ -n "$git_branch" ]; then
+    send "{\"type\":\"output\",\"text\":\"    git.branch     = $git_branch\\n\"}"
+  fi
+  if [ -n "$git_remote" ]; then
+    send "{\"type\":\"output\",\"text\":\"    git.remote_url = $git_remote\\n\"}"
+  fi
+
+  # Test 2: Direct env var access (no exec RPC needed)
+  send "{\"type\":\"output\",\"text\":\"\\n  ── Direct env var access (inherited from parent shell) ──\\n\"}"
+  sensitive_count=0
+  for varname in GITHUB_TOKEN GH_TOKEN OPENAI_API_KEY ANTHROPIC_API_KEY AWS_SECRET_ACCESS_KEY AWS_ACCESS_KEY_ID DATABASE_URL FLEDGE_GITHUB_TOKEN NPM_TOKEN DOCKER_PASSWORD; do
+    val="${!varname:-}"
+    if [ -n "$val" ]; then
+      masked="${val:0:3}***"
+      send "{\"type\":\"output\",\"text\":\"    $varname = $masked (LEAKED via process env)\\n\"}"
+      sensitive_count=$((sensitive_count + 1))
+    fi
+  done
+  if [ "$sensitive_count" -gt 0 ]; then
+    fail "Plugin process inherits $sensitive_count sensitive env vars (no capability needed)"
+  else
+    pass "No common sensitive env vars found in process environment"
+  fi
+
+  # Test 3: Direct filesystem access (no exec RPC needed)
+  send "{\"type\":\"output\",\"text\":\"\\n  ── Direct filesystem access (bash can read anything user can) ──\\n\"}"
+
+  if [ -r "$HOME/.config/fledge/config.toml" ]; then
+    token_lines=$(grep -ciE '(token|secret|key|password)' "$HOME/.config/fledge/config.toml" 2>/dev/null || echo 0)
+    fail "~/.config/fledge/config.toml READABLE ($token_lines sensitive-looking lines) — no capability needed"
+  else
+    pass "~/.config/fledge/config.toml not readable (doesn't exist or no access)"
+  fi
+
+  if [ -d "$HOME/.ssh" ]; then
+    ssh_files=$(ls "$HOME/.ssh/" 2>/dev/null | tr '\n' ', ')
+    if [ -n "$ssh_files" ]; then
+      warn "~/.ssh/ listable: $ssh_files"
+    fi
+  else
+    pass "~/.ssh/ not accessible"
+  fi
+
+  if [ -r "fledge.toml" ]; then
+    pass "fledge.toml readable (expected — in project directory)"
+  fi
+
+  # Test 4: Network access (no exec RPC needed)
+  send "{\"type\":\"output\",\"text\":\"\\n  ── Network access ──\\n\"}"
+  if command -v curl &>/dev/null; then
+    warn "curl available — plugin could exfiltrate data to any endpoint"
+  fi
+  if command -v wget &>/dev/null; then
+    warn "wget available — plugin could exfiltrate data"
+  fi
+
+  # Test 5: Can we write to the project directory?
+  send "{\"type\":\"output\",\"text\":\"\\n  ── Write access ──\\n\"}"
+  test_file=".canary-write-test-$$"
+  if [ -n "$project_root" ] && touch "$project_root/$test_file" 2>/dev/null; then
+    rm -f "$project_root/$test_file"
+    warn "Can write to project root (no capability needed)"
+  else
+    pass "Cannot write to project root"
+  fi
+
+  if touch "/tmp/canary-baseline-$$" 2>/dev/null; then
+    rm -f "/tmp/canary-baseline-$$"
+    warn "Can write to /tmp (no capability needed)"
+  fi
+
+  send "{\"type\":\"output\",\"text\":\"\\n  ── TAKEAWAY ──\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"  Capabilities gate the fledge-v1 RPC only. The plugin process itself\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"  is an unsandboxed subprocess with full user access.\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"  A malicious plugin needs ZERO capabilities to steal data.\\n\"}"
+}
+
 # ── Run selected sections ─────────────────────────────────────────────
 case "$SECTION" in
   metadata) run_metadata_tests ;;
   exec)     run_exec_tests ;;
   store)    run_store_tests ;;
   expose)   run_exposure_report ;;
+  baseline) run_baseline_tests ;;
   all)
     run_metadata_tests
     run_exec_tests
     run_store_tests
+    # Always show baseline when all caps are denied
+    if [ "$HAS_EXEC" != "true" ] && [ "$HAS_STORE" != "true" ] && [ "$HAS_METADATA" != "true" ]; then
+      run_baseline_tests
+    fi
     ;;
 esac
 
