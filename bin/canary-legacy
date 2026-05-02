@@ -2,58 +2,73 @@
 set -euo pipefail
 
 # fledge-plugin-canary legacy mode
-# This runs WITHOUT the fledge-v1 protocol to show what a legacy plugin sees.
-# Legacy plugins inherit the full shell environment unfiltered.
+# Shows what a plugin's bash process can see WITHOUT using any RPC capabilities.
+# This wraps output in fledge-v1 JSON so it actually renders.
 
-echo "=== CANARY LEGACY MODE ==="
-echo "This plugin runs without fledge-v1 protocol."
-echo "It inherits your full shell environment — here's what it can see:"
-echo ""
+send() { echo "{\"type\":\"output\",\"text\":\"$1\\n\"}"; }
+recv() { read -r line; echo "$line"; }
 
-echo "=== FLEDGE-SET VARIABLES ==="
-env | grep -i "^FLEDGE_" | sort || echo "  (none)"
-echo ""
+# Read and discard the init message (required by protocol)
+INIT=$(recv)
 
-echo "=== SENSITIVE-LOOKING VARIABLES ==="
-echo "These match patterns like TOKEN, SECRET, KEY, PASSWORD, CREDENTIAL, API:"
+send "=== CANARY LEGACY MODE ==="
+send "Shows what the plugin process inherits from the parent shell."
+send "None of this requires any fledge-v1 capability grant."
+send ""
+
+send "=== FLEDGE-SET VARIABLES ==="
+fledge_vars=$(env | grep -i "^FLEDGE_" | sort || true)
+if [ -n "$fledge_vars" ]; then
+  while IFS= read -r line; do
+    varname=$(echo "$line" | cut -d= -f1)
+    value=$(echo "$line" | cut -d= -f2-)
+    send "  $varname=$value"
+  done <<< "$fledge_vars"
+else
+  send "  (none)"
+fi
+send ""
+
+send "=== SENSITIVE-LOOKING VARIABLES ==="
+send "Patterns: TOKEN, SECRET, KEY, PASSWORD, CREDENTIAL, API:"
 sensitive=$(env | grep -iE '(TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL|API_)' | sort || true)
 if [ -n "$sensitive" ]; then
   while IFS= read -r line; do
     varname=$(echo "$line" | cut -d= -f1)
     value=$(echo "$line" | cut -d= -f2-)
-    # Mask all but first 4 chars
     if [ ${#value} -gt 4 ]; then
-      masked="${value:0:4}$(printf '*%.0s' $(seq 1 $((${#value} - 4))))"
+      masked="${value:0:4}***"
     else
       masked="****"
     fi
-    echo "  $varname=$masked"
+    send "  $varname=$masked"
   done <<< "$sensitive"
 else
-  echo "  (none found)"
+  send "  (none found)"
 fi
-echo ""
+send ""
 
-echo "=== ENVIRONMENT SUMMARY ==="
+send "=== ENVIRONMENT SUMMARY ==="
 total=$(env | wc -l | tr -d ' ')
-echo "  Total env vars visible: $total"
-echo ""
+send "  Total env vars visible to process: $total"
+send ""
 
-echo "=== FILESYSTEM ACCESS ==="
+send "=== FILESYSTEM ACCESS ==="
 if [ -r "$HOME/.config/fledge/config.toml" ]; then
-  echo "  Global config (~/.config/fledge/config.toml): READABLE"
-  echo "  Contains token-like values: $(grep -ciE '(token|secret|key|password)' "$HOME/.config/fledge/config.toml" 2>/dev/null || echo 0) lines"
+  token_count=$(grep -ciE '(token|secret|key|password)' "$HOME/.config/fledge/config.toml" 2>/dev/null || echo 0)
+  send "  Global config (~/.config/fledge/config.toml): READABLE ($token_count sensitive lines)"
 else
-  echo "  Global config (~/.config/fledge/config.toml): NOT READABLE"
+  send "  Global config (~/.config/fledge/config.toml): NOT READABLE"
 fi
 
 if [ -r "fledge.toml" ]; then
-  echo "  Project config (fledge.toml): READABLE"
+  send "  Project config (fledge.toml): READABLE"
 else
-  echo "  Project config (fledge.toml): NOT READABLE"
+  send "  Project config (fledge.toml): NOT READABLE"
 fi
-echo ""
+send ""
 
-echo "=== CONCLUSION ==="
-echo "Legacy plugins (no protocol) inherit everything."
-echo "Migrate to fledge-v1 protocol for capability-gated access."
+send "=== CONCLUSION ==="
+send "The plugin process is an unsandboxed subprocess."
+send "Capabilities only gate fledge-v1 RPC responses."
+send "Direct bash access to files, env, and network is always available."
