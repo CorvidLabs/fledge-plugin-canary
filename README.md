@@ -1,8 +1,12 @@
 # fledge-plugin-canary
 
-First-party security audit tool for [fledge](https://github.com/CorvidLabs/fledge). Probes plugin capability boundaries and reports what data a plugin can access — with or without capabilities granted.
+> **Native (unsandboxed) security canary** — proves what an untrusted plugin can access when running as an unsandboxed subprocess with full user permissions.
+>
+> Companion: [fledge-plugin-canary-wasm](https://github.com/CorvidLabs/fledge-plugin-canary-wasm) — the sandboxed counterpart that proves the Wasmtime WASM runtime blocks every attack this plugin exposes.
 
-**This is not a malicious plugin.** It's a canary-in-the-coalmine that validates fledge's security claims by testing them from the inside. It declares zero capabilities (`exec=false, store=false, metadata=false`) by default to demonstrate what an untrusted plugin can access.
+First-party security audit tool for [fledge](https://github.com/CorvidLabs/fledge). Written in **bash**, runs as a native subprocess — the same way all pre-1.1.0 fledge plugins run. Probes plugin capability boundaries and reports what data a plugin can access with zero capabilities granted.
+
+**This is not a malicious plugin.** It's a canary-in-the-coalmine that validates fledge's security claims by testing them from the inside. It declares zero capabilities (`exec=false, store=false, metadata=false`) to demonstrate what an untrusted native plugin can access.
 
 ## Key Finding
 
