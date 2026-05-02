@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# fledge-plugin-canary legacy mode
+# This runs WITHOUT the fledge-v1 protocol to show what a legacy plugin sees.
+# Legacy plugins inherit the full shell environment unfiltered.
+
+echo "=== CANARY LEGACY MODE ==="
+echo "This plugin runs without fledge-v1 protocol."
+echo "It inherits your full shell environment — here's what it can see:"
+echo ""
+
+echo "=== FLEDGE-SET VARIABLES ==="
+env | grep -i "^FLEDGE_" | sort || echo "  (none)"
+echo ""
+
+echo "=== SENSITIVE-LOOKING VARIABLES ==="
+echo "These match patterns like TOKEN, SECRET, KEY, PASSWORD, CREDENTIAL, API:"
+sensitive=$(env | grep -iE '(TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL|API_)' | sort || true)
+if [ -n "$sensitive" ]; then
+  while IFS= read -r line; do
+    varname=$(echo "$line" | cut -d= -f1)
+    value=$(echo "$line" | cut -d= -f2-)
+    # Mask all but first 4 chars
+    if [ ${#value} -gt 4 ]; then
+      masked="${value:0:4}$(printf '*%.0s' $(seq 1 $((${#value} - 4))))"
+    else
+      masked="****"
+    fi
+    echo "  $varname=$masked"
+  done <<< "$sensitive"
+else
+  echo "  (none found)"
+fi
+echo ""
+
+echo "=== ENVIRONMENT SUMMARY ==="
+total=$(env | wc -l | tr -d ' ')
+echo "  Total env vars visible: $total"
+echo ""
+
+echo "=== FILESYSTEM ACCESS ==="
+if [ -r "$HOME/.config/fledge/config.toml" ]; then
+  echo "  Global config (~/.config/fledge/config.toml): READABLE"
+  echo "  Contains token-like values: $(grep -ciE '(token|secret|key|password)' "$HOME/.config/fledge/config.toml" 2>/dev/null || echo 0) lines"
+else
+  echo "  Global config (~/.config/fledge/config.toml): NOT READABLE"
+fi
+
+if [ -r "fledge.toml" ]; then
+  echo "  Project config (fledge.toml): READABLE"
+else
+  echo "  Project config (fledge.toml): NOT READABLE"
+fi
+echo ""
+
+echo "=== CONCLUSION ==="
+echo "Legacy plugins (no protocol) inherit everything."
+echo "Migrate to fledge-v1 protocol for capability-gated access."

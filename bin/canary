@@ -1,0 +1,350 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# fledge-plugin-canary — first-party security audit tool
+# Probes plugin capability boundaries and reports what leaks.
+# Run: fledge canary [--section metadata|exec|store|all]
+
+PASS=0
+FAIL=0
+WARN=0
+ID=0
+
+send() { echo "$1"; }
+recv() { read -r line; echo "$line"; }
+next_id() { ID=$((ID + 1)); echo "$ID"; }
+
+pass() { PASS=$((PASS + 1)); send "{\"type\":\"output\",\"text\":\"  \\u2713 PASS: $1\\n\"}"; }
+fail() { FAIL=$((FAIL + 1)); send "{\"type\":\"output\",\"text\":\"  \\u2717 FAIL: $1\\n\"}"; }
+warn() { WARN=$((WARN + 1)); send "{\"type\":\"output\",\"text\":\"  ! WARN: $1\\n\"}"; }
+header() { send "{\"type\":\"output\",\"text\":\"\\n=== $1 ===\\n\"}"; }
+
+# ── Init ──────────────────────────────────────────────────────────────
+INIT=$(recv)
+CAPS=$(echo "$INIT" | jq -r '.capabilities')
+HAS_EXEC=$(echo "$CAPS" | jq -r '.exec // false')
+HAS_STORE=$(echo "$CAPS" | jq -r '.store // false')
+HAS_METADATA=$(echo "$CAPS" | jq -r '.metadata // false')
+
+SECTION="all"
+ARGS=$(echo "$INIT" | jq -r '.args[0] // ""')
+case "$ARGS" in
+  metadata|exec|store) SECTION="$ARGS" ;;
+  *) SECTION="all" ;;
+esac
+
+send "{\"type\":\"output\",\"text\":\"fledge-plugin-canary v0.1.0\\n\"}"
+send "{\"type\":\"output\",\"text\":\"Capabilities granted: exec=$HAS_EXEC store=$HAS_STORE metadata=$HAS_METADATA\\n\"}"
+send "{\"type\":\"output\",\"text\":\"Running section: $SECTION\\n\"}"
+
+# ── Metadata Tests ────────────────────────────────────────────────────
+run_metadata_tests() {
+  header "METADATA CAPABILITY TESTS"
+
+  if [ "$HAS_METADATA" != "true" ]; then
+    send "{\"type\":\"output\",\"text\":\"  (metadata not granted — testing denial)\\n\"}"
+  fi
+
+  # Test 1: Can we read fledge_config?
+  mid=$(next_id)
+  send "{\"type\":\"metadata\",\"id\":\"$mid\",\"keys\":[\"fledge_config\"]}"
+  resp=$(recv)
+  val=$(echo "$resp" | jq -r '.value.fledge_config // empty')
+  if [ "$HAS_METADATA" = "true" ]; then
+    if [ -n "$val" ] && [ "$val" != "null" ]; then
+      pass "fledge_config readable (expected with metadata cap)"
+      # Check if anything secret-looking is in there
+      secrets=$(echo "$val" | jq -r '.. | strings' 2>/dev/null | grep -iE '(token|secret|password|key|credential)' || true)
+      if [ -n "$secrets" ]; then
+        warn "fledge.toml contains secret-looking values (users should not put secrets here)"
+      else
+        pass "fledge.toml has no obvious secrets"
+      fi
+    else
+      fail "fledge_config empty despite metadata cap"
+    fi
+  else
+    if [ -z "$val" ] || [ "$val" = "null" ]; then
+      pass "fledge_config blocked without metadata cap"
+    else
+      fail "fledge_config readable WITHOUT metadata cap — data leaked"
+    fi
+  fi
+
+  # Test 2: Env var filtering
+  mid=$(next_id)
+  send "{\"type\":\"metadata\",\"id\":\"$mid\",\"keys\":[\"env\"]}"
+  resp=$(recv)
+  env_obj=$(echo "$resp" | jq -r '.value.env // {}')
+
+  if [ "$HAS_METADATA" = "true" ]; then
+    # Check for sensitive patterns that should be filtered
+    leaked=""
+    for pattern in GITHUB_TOKEN AWS_SECRET_ACCESS_KEY OPENAI_API_KEY ANTHROPIC_API_KEY DATABASE_URL FLEDGE_GITHUB_TOKEN; do
+      val=$(echo "$env_obj" | jq -r ".[\"$pattern\"] // empty")
+      if [ -n "$val" ]; then
+        leaked="$leaked $pattern"
+      fi
+    done
+
+    if [ -n "$leaked" ]; then
+      fail "Sensitive env vars leaked through metadata:$leaked"
+    else
+      pass "Common sensitive env var patterns filtered"
+    fi
+
+    # Count what IS visible
+    env_count=$(echo "$env_obj" | jq 'length')
+    send "{\"type\":\"output\",\"text\":\"  (env vars visible via metadata: $env_count)\\n\"}"
+
+    # List any vars containing 'key', 'token', 'secret', 'password' in their names
+    suspicious=$(echo "$env_obj" | jq -r 'keys[]' | grep -iE '(token|secret|password|credential|apikey)' || true)
+    if [ -n "$suspicious" ]; then
+      warn "Vars with sensitive-sounding names passed filter: $suspicious"
+    else
+      pass "No sensitive-sounding var names passed filter"
+    fi
+  else
+    env_count=$(echo "$env_obj" | jq 'length' 2>/dev/null || echo "0")
+    if [ "$env_count" = "0" ]; then
+      pass "Env vars blocked without metadata cap"
+    else
+      fail "Env vars readable WITHOUT metadata cap — $env_count vars leaked"
+    fi
+  fi
+
+  # Test 3: Git info access
+  mid=$(next_id)
+  send "{\"type\":\"metadata\",\"id\":\"$mid\",\"keys\":[\"git_status\",\"git_log\",\"git_tags\"]}"
+  resp=$(recv)
+  git_status=$(echo "$resp" | jq -r '.value.git_status // empty')
+  git_log=$(echo "$resp" | jq -r '.value.git_log // empty')
+
+  if [ "$HAS_METADATA" = "true" ]; then
+    if [ -n "$git_status" ] || [ -n "$git_log" ]; then
+      pass "Git metadata accessible (expected with metadata cap)"
+    else
+      warn "Git metadata empty — might not be in a git repo"
+    fi
+  else
+    if [ -z "$git_status" ] && [ -z "$git_log" ]; then
+      pass "Git metadata blocked without metadata cap"
+    else
+      fail "Git metadata readable WITHOUT metadata cap"
+    fi
+  fi
+}
+
+# ── Exec Tests ────────────────────────────────────────────────────────
+run_exec_tests() {
+  header "EXEC CAPABILITY TESTS"
+
+  if [ "$HAS_EXEC" != "true" ]; then
+    send "{\"type\":\"output\",\"text\":\"  (exec not granted — testing denial)\\n\"}"
+  fi
+
+  # Test 1: Basic exec works
+  mid=$(next_id)
+  send "{\"type\":\"exec\",\"id\":\"$mid\",\"command\":\"echo canary-test\"}"
+  resp=$(recv)
+  code=$(echo "$resp" | jq -r '.value.code // 126')
+  stdout=$(echo "$resp" | jq -r '.value.stdout // empty')
+
+  if [ "$HAS_EXEC" = "true" ]; then
+    if [ "$code" = "0" ] && echo "$stdout" | grep -q "canary-test"; then
+      pass "Basic exec works"
+    elif [ "$code" = "126" ]; then
+      fail "Exec blocked despite having exec cap"
+    else
+      fail "Exec returned unexpected code=$code"
+    fi
+  else
+    if [ "$code" = "126" ]; then
+      pass "Exec blocked without exec cap (code 126)"
+    else
+      fail "Exec succeeded WITHOUT exec cap — command ran"
+    fi
+  fi
+
+  # Only run remaining exec tests if we have the capability
+  if [ "$HAS_EXEC" != "true" ]; then
+    return
+  fi
+
+  # Test 2: Can we read global config?
+  mid=$(next_id)
+  send "{\"type\":\"exec\",\"id\":\"$mid\",\"command\":\"cat ~/.config/fledge/config.toml 2>/dev/null || echo __NOT_FOUND__\"}"
+  resp=$(recv)
+  stdout=$(echo "$resp" | jq -r '.value.stdout // empty')
+
+  if echo "$stdout" | grep -q "__NOT_FOUND__"; then
+    pass "Global config not found (or doesn't exist)"
+  elif echo "$stdout" | grep -qiE '(github_token|token|api_key)'; then
+    warn "Global config readable via exec AND contains token-like values"
+    send "{\"type\":\"output\",\"text\":\"  (This is expected — exec = full shell access. Document this clearly.)\\n\"}"
+  elif [ -n "$stdout" ]; then
+    warn "Global config readable via exec (expected — exec = shell access)"
+  fi
+
+  # Test 3: Can we escape cwd?
+  mid=$(next_id)
+  send "{\"type\":\"exec\",\"id\":\"$mid\",\"command\":\"ls /etc/hosts\"}"
+  resp=$(recv)
+  code=$(echo "$resp" | jq -r '.value.code // 126')
+  if [ "$code" = "0" ]; then
+    warn "Can access files outside project root via exec (expected — exec = shell access)"
+  else
+    pass "File access outside project root blocked"
+  fi
+
+  # Test 4: cwd traversal via the cwd parameter
+  mid=$(next_id)
+  send "{\"type\":\"exec\",\"id\":\"$mid\",\"command\":\"pwd\",\"cwd\":\"../../..\"}"
+  resp=$(recv)
+  code=$(echo "$resp" | jq -r '.value.code // 126')
+  stdout=$(echo "$resp" | jq -r '.value.stdout // empty' | tr -d '[:space:]')
+
+  if [ "$code" = "126" ] || [ "$code" = "1" ]; then
+    pass "cwd traversal (../../..) blocked"
+  else
+    # Check if the resolved path is still under project root
+    project_root=$(echo "$INIT" | jq -r '.project.root // ""')
+    if [ -n "$project_root" ] && echo "$stdout" | grep -q "^$project_root"; then
+      pass "cwd traversal resolved within project root (canonicalize works)"
+    else
+      warn "cwd traversal resolved to: $stdout (may be outside project root)"
+    fi
+  fi
+
+  # Test 5: Env var access via exec
+  mid=$(next_id)
+  send "{\"type\":\"exec\",\"id\":\"$mid\",\"command\":\"env | grep -iE '(TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL)' | head -20 || echo __NONE__\"}"
+  resp=$(recv)
+  stdout=$(echo "$resp" | jq -r '.value.stdout // empty')
+
+  if echo "$stdout" | grep -q "__NONE__"; then
+    pass "No sensitive-looking env vars visible via exec"
+  elif [ -n "$stdout" ]; then
+    count=$(echo "$stdout" | wc -l | tr -d ' ')
+    warn "Exec env has $count sensitive-looking vars (expected — exec inherits shell env)"
+    send "{\"type\":\"output\",\"text\":\"  Visible sensitive vars:\\n\"}"
+    while IFS= read -r line; do
+      varname=$(echo "$line" | cut -d= -f1)
+      send "{\"type\":\"output\",\"text\":\"    - $varname\\n\"}"
+    done <<< "$stdout"
+  fi
+
+  # Test 6: Can we write to the plugin directory?
+  mid=$(next_id)
+  plugin_dir=$(echo "$INIT" | jq -r '.plugin.dir // ""')
+  send "{\"type\":\"exec\",\"id\":\"$mid\",\"command\":\"touch /tmp/canary-write-test && rm /tmp/canary-write-test && echo __OK__\"}"
+  resp=$(recv)
+  stdout=$(echo "$resp" | jq -r '.value.stdout // empty')
+  if echo "$stdout" | grep -q "__OK__"; then
+    warn "Can write to /tmp via exec (expected — exec = shell access)"
+  fi
+}
+
+# ── Store Tests ───────────────────────────────────────────────────────
+run_store_tests() {
+  header "STORE CAPABILITY TESTS"
+
+  if [ "$HAS_STORE" != "true" ]; then
+    send "{\"type\":\"output\",\"text\":\"  (store not granted — testing denial)\\n\"}"
+  fi
+
+  # Test 1: Basic store/load cycle
+  mid=$(next_id)
+  send "{\"type\":\"store\",\"key\":\"canary_test\",\"value\":\"hello\"}"
+  # store is fire-and-forget, no response
+
+  mid=$(next_id)
+  send "{\"type\":\"load\",\"id\":\"$mid\",\"key\":\"canary_test\"}"
+  resp=$(recv)
+  val=$(echo "$resp" | jq -r '.value // empty')
+
+  if [ "$HAS_STORE" = "true" ]; then
+    if [ "$val" = "hello" ]; then
+      pass "Store/load cycle works"
+    elif [ -z "$val" ] || [ "$val" = "null" ]; then
+      fail "Store/load failed — value not persisted"
+    fi
+  else
+    if [ -z "$val" ] || [ "$val" = "null" ]; then
+      pass "Store blocked without store cap (load returns null)"
+    else
+      fail "Store readable WITHOUT store cap — data leaked"
+    fi
+  fi
+
+  # Only run remaining store tests if we have the capability
+  if [ "$HAS_STORE" != "true" ]; then
+    return
+  fi
+
+  # Test 2: Key length boundary (256 bytes max)
+  long_key=$(printf 'x%.0s' $(seq 1 257))
+  send "{\"type\":\"store\",\"key\":\"$long_key\",\"value\":\"test\"}"
+  mid=$(next_id)
+  send "{\"type\":\"load\",\"id\":\"$mid\",\"key\":\"$long_key\"}"
+  resp=$(recv)
+  val=$(echo "$resp" | jq -r '.value // empty')
+
+  if [ -z "$val" ] || [ "$val" = "null" ]; then
+    pass "Oversized key (257 bytes) rejected"
+  else
+    fail "Oversized key (257 bytes) accepted — boundary not enforced"
+  fi
+
+  # Test 3: Value size boundary (64 KB max)
+  big_value=$(printf 'x%.0s' $(seq 1 65537))
+  send "{\"type\":\"store\",\"key\":\"canary_big\",\"value\":\"$big_value\"}"
+  mid=$(next_id)
+  send "{\"type\":\"load\",\"id\":\"$mid\",\"key\":\"canary_big\"}"
+  resp=$(recv)
+  val=$(echo "$resp" | jq -r '.value // empty')
+
+  if [ -z "$val" ] || [ "$val" = "null" ]; then
+    pass "Oversized value (65537 bytes) rejected"
+  else
+    val_len=${#val}
+    if [ "$val_len" -le 65536 ]; then
+      warn "Oversized value stored but truncated to $val_len bytes"
+    else
+      fail "Oversized value (65537 bytes) accepted without truncation"
+    fi
+  fi
+
+  # Cleanup test keys
+  send "{\"type\":\"store\",\"key\":\"canary_test\",\"value\":\"\"}"
+  send "{\"type\":\"store\",\"key\":\"canary_big\",\"value\":\"\"}"
+}
+
+# ── Run selected sections ─────────────────────────────────────────────
+case "$SECTION" in
+  metadata) run_metadata_tests ;;
+  exec)     run_exec_tests ;;
+  store)    run_store_tests ;;
+  all)
+    run_metadata_tests
+    run_exec_tests
+    run_store_tests
+    ;;
+esac
+
+# ── Summary ───────────────────────────────────────────────────────────
+header "SUMMARY"
+TOTAL=$((PASS + FAIL + WARN))
+send "{\"type\":\"output\",\"text\":\"  $TOTAL tests: $PASS passed, $FAIL failed, $WARN warnings\\n\"}"
+
+if [ "$FAIL" -gt 0 ]; then
+  send "{\"type\":\"output\",\"text\":\"\\n  Failures indicate capability boundaries not enforced as expected.\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"  Review the FAIL items above and update security documentation.\\n\"}"
+  exit 1
+elif [ "$WARN" -gt 0 ]; then
+  send "{\"type\":\"output\",\"text\":\"\\n  Warnings indicate expected-but-noteworthy behaviors.\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"  These should be documented so users understand the trust model.\\n\"}"
+fi
+
+send "{\"type\":\"output\",\"text\":\"\\n\"}"
+exit 0

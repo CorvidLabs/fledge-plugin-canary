@@ -1,0 +1,21 @@
+[plugin]
+name = "canary"
+version = "0.1.0"
+description = "Security audit tool — probes plugin capability boundaries and reports what leaks"
+author = "CorvidLabs"
+protocol = "fledge-v1"
+
+[[commands]]
+name = "canary"
+description = "Run security boundary tests against the plugin sandbox"
+binary = "bin/canary"
+
+[[commands]]
+name = "canary-legacy"
+description = "Legacy-mode env dump (no protocol) — shows unfiltered environment"
+binary = "bin/canary-legacy"
+
+[capabilities]
+exec = true
+store = true
+metadata = true
