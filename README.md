@@ -6,7 +6,7 @@ First-party security audit tool for [fledge](https://github.com/CorvidLabs/fledg
 
 ## Key Finding
 
-**Capabilities gate the fledge-v1 RPC protocol, not the plugin process.** A plugin with zero capabilities can still:
+**Capabilities gate the fledge-v1 RPC protocol, not the plugin process.** A native plugin with zero capabilities can still:
 
 - Read `~/.ssh/`, `~/.aws/credentials`, `~/.config/gh/hosts.yml`, and other credential files
 - Read shell history (which often contains pasted tokens)
@@ -15,13 +15,45 @@ First-party security audit tool for [fledge](https://github.com/CorvidLabs/fledg
 - Access the clipboard (`pbpaste` on macOS)
 - See all running processes, hostname, and username
 
-The capability system correctly blocks unauthorized RPC messages (metadata, exec, store all return denial responses). But the plugin process itself is an unsandboxed subprocess with full user permissions. **Treat installing any plugin as equivalent to running arbitrary code.**
+The capability system correctly blocks unauthorized RPC messages (metadata, exec, store all return denial responses). But the plugin process itself is an unsandboxed subprocess with full user permissions.
+
+**WASM plugins (fledge 1.1.0+) fix this.** The Wasmtime sandbox enforces boundaries structurally — missing WASI preopens mean files don't exist, missing imports mean functions can't be called.
+
+## Native vs WASM Comparison
+
+| Attack | Native (bash) | WASM (sandbox) |
+|--------|:---:|:---:|
+| Read ~/.ssh/id_ed25519 | LEAKED | BLOCKED |
+| Read ~/.aws/credentials | LEAKED | BLOCKED |
+| Read ~/.config/fledge/config.toml | LEAKED | BLOCKED |
+| Read shell history | LEAKED | BLOCKED |
+| Inherit GITHUB_TOKEN env var | LEAKED | BLOCKED |
+| Inherit OPENAI_API_KEY env var | LEAKED | BLOCKED |
+| Exfiltrate via curl | AVAILABLE | BLOCKED |
+| Exfiltrate via DNS (dig) | AVAILABLE | BLOCKED |
+| TCP connection to any host | AVAILABLE | BLOCKED |
+| Spawn shell commands | AVAILABLE | BLOCKED |
+| Write .git/hooks (backdoor) | WRITABLE | BLOCKED |
+| Write shell RC files | WRITABLE | BLOCKED |
+| Install LaunchAgent daemon | WRITABLE | BLOCKED |
+| Read clipboard (pbpaste) | AVAILABLE | BLOCKED |
+| Schedule crontab | AVAILABLE | BLOCKED |
+| List processes (ps aux) | AVAILABLE | BLOCKED |
+
+**Native**: unsandboxed subprocess with full user access.
+**WASM**: Wasmtime sandbox with `filesystem=none`, `network=false`, `exec=false`.
 
 ## Install
 
 ```bash
+# Native canary (shows what native plugins can access)
 fledge plugins install CorvidLabs/fledge-plugin-canary
 # No capability prompt — the plugin requests zero capabilities
+
+# WASM canary (proves the sandbox blocks those same attacks)
+# Requires: rustup target add wasm32-wasip1
+# Copy plugin-wasm.toml to plugin.toml in the install directory,
+# or install from a branch/fork with runtime = "wasm" as the default manifest.
 ```
 
 ## Usage
@@ -34,11 +66,14 @@ fledge canary
 fledge canary metadata    # Metadata RPC tests
 fledge canary exec        # Exec RPC tests
 fledge canary store       # Store RPC tests
-fledge canary baseline    # Direct process access tests (no RPC)
+fledge canary baseline    # Direct process access tests + WASM contrast
 fledge canary expose      # Full exposure report
 
 # Legacy mode — shows unfiltered env inheritance
 fledge canary-legacy
+
+# WASM canary (if installed separately)
+fledge canary-wasm
 ```
 
 ## What It Tests
@@ -86,6 +121,21 @@ These test the fledge-v1 protocol's capability gating — whether the RPC layer 
 | **Persistence** | `.git/hooks/` (inject into commits), `~/.zshrc` (backdoor shell startup), `~/Library/LaunchAgents/` (persistent daemon), `crontab` (scheduled exfiltration) |
 | **System recon** | Process list, username, hostname, home directory |
 
+The baseline section ends with a **WASM Sandbox Contrast** showing what the WASM runtime would block for each detected attack.
+
+### WASM Canary (`wasm/`)
+
+A Rust program compiled to `wasm32-wasip1` that runs inside fledge's Wasmtime sandbox. Attempts every attack from the native canary's baseline:
+
+- **Environment variables**: tries to read GITHUB_TOKEN, AWS keys, HOME, PATH, etc.
+- **Filesystem reads**: credential files, /etc/hosts, path traversal, directory listing
+- **Filesystem writes**: /tmp, working directory, .git/hooks injection
+- **Network**: TCP connections to external hosts
+- **Process spawning**: echo, curl, cat, crontab, pbpaste, ps, whoami
+- **Clipboard**: pbpaste access
+
+Every test should report BLOCKED. Any LEAKED result indicates a sandbox escape.
+
 ### Exposure Report (`fledge canary expose`)
 
 Detailed report showing exactly what data each capability exposes, with masked values. Shows the full attack surface including config file contents, env vars via both metadata RPC and direct shell access, SSH keys, and git credentials.
@@ -96,16 +146,25 @@ Runs without the fledge-v1 protocol — dumps the raw inherited environment (mas
 
 ## Reading the Output
 
-- **PASS** — boundary enforced as documented
-- **FAIL** — boundary not enforced; security docs need updating
+- **PASS** / **BLOCKED** — boundary enforced as documented
+- **FAIL** / **LEAKED** — boundary not enforced; investigate immediately
 - **WARN** — expected behavior that users should understand (e.g., credential files readable without any capability)
 
 **Zero FAILs + some WARNs = your security model is accurately documented.** The WARNs are the honest story — they show what's really possible, not what we wish was possible.
 
+## Building the WASM Canary
+
+```bash
+cd wasm
+rustup target add wasm32-wasip1
+cargo build --target wasm32-wasip1 --release
+# Binary at: wasm/target/wasm32-wasip1/release/canary-wasm.wasm
+```
+
 ## Example Output (Zero Capabilities)
 
 ```
-fledge-plugin-canary v0.5.1
+fledge-plugin-canary v0.6.0
 Capabilities granted: exec=false store=false metadata=false
 Running section: all
 
@@ -129,6 +188,18 @@ Running section: all
 
   ...WARNs for each accessible credential file, history, persistence vector...
 
+  ── WASM SANDBOX CONTRAST ──
+  A WASM plugin (runtime="wasm") with the same code would see:
+
+  Filesystem (WASI preopens enforce boundaries):
+    NATIVE: ~/.ssh/ READABLE            → WASM: BLOCKED (no preopened dir for ~)
+    NATIVE: ~/.config/fledge/ READABLE   → WASM: BLOCKED (outside sandbox)
+    ...
+
+  Environment Variables (WASM guest has empty env):
+    NATIVE: GITHUB_TOKEN LEAKED          → WASM: BLOCKED (not passed to guest)
+    ...
+
   ── TAKEAWAY ──
   Capabilities gate the fledge-v1 RPC only. The plugin process itself
   is an unsandboxed subprocess with full user access.
@@ -142,13 +213,14 @@ Running section: all
 
 Plugin systems are trust boundaries. Rather than claiming security properties and hoping they hold, this plugin verifies them from the inside.
 
-The uncomfortable truth it reveals: **the capability system works perfectly for what it does** (gating RPC messages), but the real attack surface is the unsandboxed process. A malicious plugin doesn't need `exec = true` to run shell commands — it's already a shell script.
+The native canary proves the attacks work. The WASM canary proves the sandbox stops them. Together they validate fledge's security model end-to-end.
 
 Run this after any change to:
 - Plugin protocol or capability gating
 - Env var filtering logic
 - The `exec` cwd validation
 - Plugin installation or trust model
+- WASM runtime or WASI configuration
 
 ## License
 

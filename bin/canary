@@ -724,6 +724,50 @@ run_baseline_tests() {
   send "{\"type\":\"output\",\"text\":\"  Capabilities gate the fledge-v1 RPC only. The plugin process itself\\n\"}"
   send "{\"type\":\"output\",\"text\":\"  is an unsandboxed subprocess with full user access.\\n\"}"
   send "{\"type\":\"output\",\"text\":\"  A malicious plugin needs ZERO capabilities to steal data.\\n\"}"
+
+  # ── WASM Sandbox Contrast ──
+  send "{\"type\":\"output\",\"text\":\"\\n  ── WASM SANDBOX CONTRAST ──\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"  A WASM plugin (runtime=\\\"wasm\\\") with the same code would see:\\n\\n\"}"
+
+  send "{\"type\":\"output\",\"text\":\"  Filesystem (WASI preopens enforce boundaries):\\n\"}"
+  if [ -r "$HOME/.ssh" ]; then
+    send "{\"type\":\"output\",\"text\":\"    NATIVE: ~/.ssh/ READABLE            → WASM: BLOCKED (no preopened dir for ~)\\n\"}"
+  fi
+  if [ -r "$HOME/.config/fledge/config.toml" ]; then
+    send "{\"type\":\"output\",\"text\":\"    NATIVE: ~/.config/fledge/ READABLE   → WASM: BLOCKED (outside sandbox)\\n\"}"
+  fi
+  if [ -r "$HOME/.aws/credentials" ]; then
+    send "{\"type\":\"output\",\"text\":\"    NATIVE: ~/.aws/credentials READABLE  → WASM: BLOCKED (outside sandbox)\\n\"}"
+  fi
+  if [ -d ".git/hooks" ] && [ -w ".git/hooks" ]; then
+    send "{\"type\":\"output\",\"text\":\"    NATIVE: .git/hooks/ WRITABLE         → WASM: BLOCKED (read-only or none)\\n\"}"
+  fi
+
+  send "{\"type\":\"output\",\"text\":\"\\n  Environment Variables (WASM guest has empty env):\\n\"}"
+  wasm_contrast_vars="GITHUB_TOKEN GH_TOKEN OPENAI_API_KEY ANTHROPIC_API_KEY AWS_SECRET_ACCESS_KEY"
+  for varname in $wasm_contrast_vars; do
+    val="${!varname:-}"
+    if [ -n "$val" ]; then
+      send "{\"type\":\"output\",\"text\":\"    NATIVE: $varname LEAKED              → WASM: BLOCKED (not passed to guest)\\n\"}"
+    fi
+  done
+
+  send "{\"type\":\"output\",\"text\":\"\\n  Network (imports not linked when network=false):\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"    NATIVE: curl/wget AVAILABLE          → WASM: BLOCKED (no socket imports)\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"    NATIVE: DNS exfil via dig AVAILABLE  → WASM: BLOCKED (no network API)\\n\"}"
+
+  send "{\"type\":\"output\",\"text\":\"\\n  Process Spawning (WASI p1 has no spawn API):\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"    NATIVE: shell commands AVAILABLE     → WASM: BLOCKED (no process API)\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"    NATIVE: crontab AVAILABLE            → WASM: BLOCKED (cannot spawn)\\n\"}"
+
+  send "{\"type\":\"output\",\"text\":\"\\n  Persistence (sandbox prevents all vectors):\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"    NATIVE: .git/hooks injection         → WASM: BLOCKED (no write access)\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"    NATIVE: shell RC backdoor            → WASM: BLOCKED (~ inaccessible)\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"    NATIVE: LaunchAgents daemon          → WASM: BLOCKED (filesystem sealed)\\n\"}"
+
+  send "{\"type\":\"output\",\"text\":\"\\n  Enforcement is structural: missing WASI preopens = files don't exist,\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"  missing imports = functions can't be called. Not a runtime check.\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"  To verify: fledge canary-wasm (requires WASM canary installed)\\n\"}"
 }
 
 # ── Run selected sections ─────────────────────────────────────────────
