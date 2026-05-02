@@ -46,15 +46,11 @@ The capability system correctly blocks unauthorized RPC messages (metadata, exec
 ## Install
 
 ```bash
-# Native canary (shows what native plugins can access)
 fledge plugins install CorvidLabs/fledge-plugin-canary
 # No capability prompt — the plugin requests zero capabilities
-
-# WASM canary (proves the sandbox blocks those same attacks)
-# Requires: rustup target add wasm32-wasip1
-# Copy plugin-wasm.toml to plugin.toml in the install directory,
-# or install from a branch/fork with runtime = "wasm" as the default manifest.
 ```
+
+For the WASM sandbox companion, see [fledge-plugin-canary-wasm](https://github.com/CorvidLabs/fledge-plugin-canary-wasm).
 
 ## Usage
 
@@ -123,18 +119,9 @@ These test the fledge-v1 protocol's capability gating — whether the RPC layer 
 
 The baseline section ends with a **WASM Sandbox Contrast** showing what the WASM runtime would block for each detected attack.
 
-### WASM Canary (`wasm/`)
+### WASM Canary
 
-A Rust program compiled to `wasm32-wasip1` that runs inside fledge's Wasmtime sandbox. Attempts every attack from the native canary's baseline:
-
-- **Environment variables**: tries to read GITHUB_TOKEN, AWS keys, HOME, PATH, etc.
-- **Filesystem reads**: credential files, /etc/hosts, path traversal, directory listing
-- **Filesystem writes**: /tmp, working directory, .git/hooks injection
-- **Network**: TCP connections to external hosts
-- **Process spawning**: echo, curl, cat, crontab, pbpaste, ps, whoami
-- **Clipboard**: pbpaste access
-
-Every test should report BLOCKED. Any LEAKED result indicates a sandbox escape.
+Separate plugin: [fledge-plugin-canary-wasm](https://github.com/CorvidLabs/fledge-plugin-canary-wasm). Runs inside fledge's Wasmtime sandbox and attempts every attack from this native canary's baseline. Every test should report BLOCKED — any LEAKED result indicates a sandbox escape.
 
 ### Exposure Report (`fledge canary expose`)
 
@@ -151,15 +138,6 @@ Runs without the fledge-v1 protocol — dumps the raw inherited environment (mas
 - **WARN** — expected behavior that users should understand (e.g., credential files readable without any capability)
 
 **Zero FAILs + some WARNs = your security model is accurately documented.** The WARNs are the honest story — they show what's really possible, not what we wish was possible.
-
-## Building the WASM Canary
-
-```bash
-cd wasm
-rustup target add wasm32-wasip1
-cargo build --target wasm32-wasip1 --release
-# Binary at: wasm/target/wasm32-wasip1/release/canary-wasm.wasm
-```
 
 ## Example Output (Zero Capabilities)
 
