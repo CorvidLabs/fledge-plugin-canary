@@ -9,10 +9,14 @@ PASS=0
 FAIL=0
 WARN=0
 ID=0
+IN_BOUNDARY_TEST=0
 
 send() { echo "$1"; }
 recv() { read -r line; echo "$line"; }
 next_id() { ID=$((ID + 1)); echo "$ID"; }
+
+# If fledge kills us during a boundary test, that IS the pass
+trap 'if [ $IN_BOUNDARY_TEST -eq 1 ]; then exit 0; fi' EXIT PIPE
 
 pass() { PASS=$((PASS + 1)); send "{\"type\":\"output\",\"text\":\"  \\u2713 PASS: $1\\n\"}"; }
 fail() { FAIL=$((FAIL + 1)); send "{\"type\":\"output\",\"text\":\"  \\u2717 FAIL: $1\\n\"}"; }
@@ -29,7 +33,7 @@ HAS_METADATA=$(echo "$CAPS" | jq -r '.metadata // false')
 SECTION="all"
 ARGS=$(echo "$INIT" | jq -r '.args[0] // ""')
 case "$ARGS" in
-  metadata|exec|store) SECTION="$ARGS" ;;
+  metadata|exec|store|expose) SECTION="$ARGS" ;;
   *) SECTION="all" ;;
 esac
 
@@ -283,41 +287,178 @@ run_store_tests() {
   fi
 
   # Test 2: Key length boundary (256 bytes max)
+  # fledge may terminate the plugin on boundary violations, so disable errexit
   long_key=$(printf 'x%.0s' $(seq 1 257))
-  send "{\"type\":\"store\",\"key\":\"$long_key\",\"value\":\"test\"}"
+  IN_BOUNDARY_TEST=1
+  set +e
+  send "{\"type\":\"store\",\"key\":\"$long_key\",\"value\":\"test\"}" 2>/dev/null
   mid=$(next_id)
-  send "{\"type\":\"load\",\"id\":\"$mid\",\"key\":\"$long_key\"}"
-  resp=$(recv)
-  val=$(echo "$resp" | jq -r '.value // empty')
+  send "{\"type\":\"load\",\"id\":\"$mid\",\"key\":\"$long_key\"}" 2>/dev/null
+  resp=$(recv 2>/dev/null)
+  store_exit=$?
+  set -e
 
-  if [ -z "$val" ] || [ "$val" = "null" ]; then
-    pass "Oversized key (257 bytes) rejected"
+  IN_BOUNDARY_TEST=0
+  if [ $store_exit -ne 0 ]; then
+    # Pipe closed = fledge terminated us for the violation — boundary enforced
+    pass "Oversized key (257 bytes) rejected (process terminated)"
   else
-    fail "Oversized key (257 bytes) accepted — boundary not enforced"
+    val=$(echo "$resp" | jq -r '.value // empty')
+    if [ -z "$val" ] || [ "$val" = "null" ]; then
+      pass "Oversized key (257 bytes) rejected"
+    else
+      fail "Oversized key (257 bytes) accepted — boundary not enforced"
+    fi
   fi
 
   # Test 3: Value size boundary (64 KB max)
+  # Same pattern — fledge may terminate on oversized values
   big_value=$(printf 'x%.0s' $(seq 1 65537))
-  send "{\"type\":\"store\",\"key\":\"canary_big\",\"value\":\"$big_value\"}"
+  IN_BOUNDARY_TEST=1
+  set +e
+  send "{\"type\":\"store\",\"key\":\"canary_big\",\"value\":\"$big_value\"}" 2>/dev/null
   mid=$(next_id)
-  send "{\"type\":\"load\",\"id\":\"$mid\",\"key\":\"canary_big\"}"
-  resp=$(recv)
-  val=$(echo "$resp" | jq -r '.value // empty')
+  send "{\"type\":\"load\",\"id\":\"$mid\",\"key\":\"canary_big\"}" 2>/dev/null
+  resp=$(recv 2>/dev/null)
+  store_exit=$?
+  set -e
 
-  if [ -z "$val" ] || [ "$val" = "null" ]; then
-    pass "Oversized value (65537 bytes) rejected"
+  IN_BOUNDARY_TEST=0
+  if [ $store_exit -ne 0 ]; then
+    pass "Oversized value (65537 bytes) rejected (process terminated)"
   else
-    val_len=${#val}
-    if [ "$val_len" -le 65536 ]; then
-      warn "Oversized value stored but truncated to $val_len bytes"
+    val=$(echo "$resp" | jq -r '.value // empty')
+    if [ -z "$val" ] || [ "$val" = "null" ]; then
+      pass "Oversized value (65537 bytes) rejected"
     else
-      fail "Oversized value (65537 bytes) accepted without truncation"
+      val_len=${#val}
+      if [ "$val_len" -le 65536 ]; then
+        warn "Oversized value stored but truncated to $val_len bytes"
+      else
+        fail "Oversized value (65537 bytes) accepted without truncation"
+      fi
     fi
   fi
 
   # Cleanup test keys
-  send "{\"type\":\"store\",\"key\":\"canary_test\",\"value\":\"\"}"
-  send "{\"type\":\"store\",\"key\":\"canary_big\",\"value\":\"\"}"
+  send "{\"type\":\"store\",\"key\":\"canary_test\",\"value\":\"\"}" 2>/dev/null
+  send "{\"type\":\"store\",\"key\":\"canary_big\",\"value\":\"\"}" 2>/dev/null
+}
+
+# ── Exposure Report ───────────────────────────────────────────────────
+run_exposure_report() {
+  header "EXPOSURE REPORT — What a malicious plugin can access"
+  send "{\"type\":\"output\",\"text\":\"  This shows exactly what data each capability exposes.\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"  A real attack would exfiltrate these via exec (curl/dns/etc).\\n\\n\"}"
+
+  # ── Config exposure via metadata ──
+  if [ "$HAS_METADATA" = "true" ]; then
+    send "{\"type\":\"output\",\"text\":\"  ── Via METADATA capability ──\\n\"}"
+
+    # fledge.toml contents
+    mid=$(next_id)
+    send "{\"type\":\"metadata\",\"id\":\"$mid\",\"keys\":[\"fledge_config\"]}"
+    resp=$(recv)
+    config=$(echo "$resp" | jq -r '.value.fledge_config // empty')
+    if [ -n "$config" ] && [ "$config" != "null" ]; then
+      send "{\"type\":\"output\",\"text\":\"  [fledge.toml] Full project config readable:\\n\"}"
+      # Show keys/structure without full values (truncate long values)
+      echo "$config" | jq -r 'paths(scalars) as $p | "    " + ($p | join(".")) + " = " + (getpath($p) | tostring | if length > 40 then .[:37] + "..." else . end)' 2>/dev/null | while IFS= read -r line; do
+        send "{\"type\":\"output\",\"text\":\"$line\\n\"}"
+      done
+    fi
+
+    # Env vars visible
+    mid=$(next_id)
+    send "{\"type\":\"metadata\",\"id\":\"$mid\",\"keys\":[\"env\"]}"
+    resp=$(recv)
+    env_obj=$(echo "$resp" | jq -r '.value.env // {}')
+    env_count=$(echo "$env_obj" | jq 'length')
+    send "{\"type\":\"output\",\"text\":\"\\n  [env vars] $env_count vars accessible via metadata RPC:\\n\"}"
+    echo "$env_obj" | jq -r 'keys[]' | sort | while IFS= read -r varname; do
+      val=$(echo "$env_obj" | jq -r ".[\"$varname\"]")
+      masked="${val:0:3}***${val: -2}"
+      if [ ${#val} -le 5 ]; then
+        masked="[${#val} chars]"
+      fi
+      send "{\"type\":\"output\",\"text\":\"    $varname = $masked\\n\"}"
+    done
+  fi
+
+  # ── Config exposure via exec ──
+  if [ "$HAS_EXEC" = "true" ]; then
+    send "{\"type\":\"output\",\"text\":\"\\n  ── Via EXEC capability ──\\n\"}"
+    send "{\"type\":\"output\",\"text\":\"  (exec = full shell — can read ANY file the user can read)\\n\\n\"}"
+
+    # Try global config
+    mid=$(next_id)
+    send "{\"type\":\"exec\",\"id\":\"$mid\",\"command\":\"cat ~/.config/fledge/config.toml 2>/dev/null || echo __NONE__\"}"
+    resp=$(recv)
+    stdout=$(echo "$resp" | jq -r '.value.stdout // empty')
+    if echo "$stdout" | grep -q "__NONE__"; then
+      send "{\"type\":\"output\",\"text\":\"  [~/.config/fledge/config.toml] Not found\\n\"}"
+    else
+      send "{\"type\":\"output\",\"text\":\"  [~/.config/fledge/config.toml] READABLE — contents:\\n\"}"
+      echo "$stdout" | while IFS= read -r line; do
+        # Mask values that look like tokens
+        masked_line=$(echo "$line" | sed -E 's/(=\s*"?)([^"]{4})[^"]*([^"]{2}("?))/\1\2***\3/g')
+        send "{\"type\":\"output\",\"text\":\"    $masked_line\\n\"}"
+      done
+    fi
+
+    # Try SSH keys
+    mid=$(next_id)
+    send "{\"type\":\"exec\",\"id\":\"$mid\",\"command\":\"ls ~/.ssh/ 2>/dev/null || echo __NONE__\"}"
+    resp=$(recv)
+    stdout=$(echo "$resp" | jq -r '.value.stdout // empty')
+    if echo "$stdout" | grep -q "__NONE__"; then
+      send "{\"type\":\"output\",\"text\":\"\\n  [~/.ssh/] Not accessible\\n\"}"
+    else
+      send "{\"type\":\"output\",\"text\":\"\\n  [~/.ssh/] Directory listable: $stdout\\n\"}"
+    fi
+
+    # Try all env vars (unfiltered via shell)
+    mid=$(next_id)
+    send "{\"type\":\"exec\",\"id\":\"$mid\",\"command\":\"env | grep -iE '(TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL|API|AUTH)' | sed -E 's/(=.{4}).*/=\\1***/' | sort\"}"
+    resp=$(recv)
+    stdout=$(echo "$resp" | jq -r '.value.stdout // empty')
+    if [ -n "$stdout" ]; then
+      send "{\"type\":\"output\",\"text\":\"\\n  [env via shell] Sensitive-looking vars (masked):\\n\"}"
+      echo "$stdout" | while IFS= read -r line; do
+        send "{\"type\":\"output\",\"text\":\"    $line\\n\"}"
+      done
+    else
+      send "{\"type\":\"output\",\"text\":\"\\n  [env via shell] No sensitive-pattern vars found\\n\"}"
+    fi
+
+    # Try git credentials
+    mid=$(next_id)
+    send "{\"type\":\"exec\",\"id\":\"$mid\",\"command\":\"git config --global --list 2>/dev/null | grep -iE '(token|credential|password|oauth)' | sed -E 's/(=.{4}).*/=\\1***/' || echo __NONE__\"}"
+    resp=$(recv)
+    stdout=$(echo "$resp" | jq -r '.value.stdout // empty')
+    if echo "$stdout" | grep -q "__NONE__" || [ -z "$stdout" ]; then
+      send "{\"type\":\"output\",\"text\":\"\\n  [git config] No credential-like entries\\n\"}"
+    else
+      send "{\"type\":\"output\",\"text\":\"\\n  [git config] Credential-like entries (masked):\\n\"}"
+      echo "$stdout" | while IFS= read -r line; do
+        send "{\"type\":\"output\",\"text\":\"    $line\\n\"}"
+      done
+    fi
+  fi
+
+  if [ "$HAS_METADATA" != "true" ] && [ "$HAS_EXEC" != "true" ]; then
+    send "{\"type\":\"output\",\"text\":\"  No metadata or exec capability — minimal exposure.\\n\"}"
+    send "{\"type\":\"output\",\"text\":\"  Only store is available (isolated key-value, no secrets access).\\n\"}"
+  fi
+
+  send "{\"type\":\"output\",\"text\":\"\\n  ── Attack vector summary ──\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"  A malicious plugin with exec could:\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"    • Read ~/.config/fledge/config.toml (GitHub token, LLM keys)\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"    • Read SSH keys, browser cookies, cloud credentials\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"    • Exfiltrate via: curl, dns tunneling, git push to attacker repo\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"    • Persist via: crontab, shell rc files, git hooks\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"    • Worm via: modify other installed plugins, inject into project\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"\\n  BOTTOM LINE: exec = full user access. Only install trusted plugins.\\n\"}"
 }
 
 # ── Run selected sections ─────────────────────────────────────────────
@@ -325,6 +466,7 @@ case "$SECTION" in
   metadata) run_metadata_tests ;;
   exec)     run_exec_tests ;;
   store)    run_store_tests ;;
+  expose)   run_exposure_report ;;
   all)
     run_metadata_tests
     run_exec_tests
