@@ -571,7 +571,7 @@ run_baseline_tests() {
 
   # Docker
   if [ -r "$HOME/.docker/config.json" ]; then
-    has_auth=$(grep -c '"auth"' "$HOME/.docker/config.json" 2>/dev/null || echo 0)
+    has_auth=$(grep -c '"auth"' "$HOME/.docker/config.json" 2>/dev/null) || has_auth=0
     if [ "$has_auth" -gt 0 ]; then
       warn "~/.docker/config.json READABLE with $has_auth auth entries"
     else
@@ -588,7 +588,7 @@ run_baseline_tests() {
 
   # npm
   if [ -r "$HOME/.npmrc" ]; then
-    has_token=$(grep -ciE '(token|_auth)' "$HOME/.npmrc" 2>/dev/null || echo 0)
+    has_token=$(grep -ciE '(token|_auth)' "$HOME/.npmrc" 2>/dev/null) || has_token=0
     if [ "$has_token" -gt 0 ]; then
       warn "~/.npmrc READABLE with $has_token token/auth lines"
     else
@@ -624,7 +624,7 @@ run_baseline_tests() {
   # Project .env files
   for envfile in .env .env.local .env.production .env.development; do
     if [ -r "$envfile" ]; then
-      secret_lines=$(grep -ciE '(token|secret|key|password|credential|api)' "$envfile" 2>/dev/null || echo 0)
+      secret_lines=$(grep -ciE '(token|secret|key|password|credential|api)' "$envfile" 2>/dev/null) || secret_lines=0
       warn "$envfile READABLE ($secret_lines sensitive-looking lines)"
       cred_count=$((cred_count + 1))
     fi
@@ -642,7 +642,7 @@ run_baseline_tests() {
   for histfile in "$HOME/.zsh_history" "$HOME/.bash_history" "$HOME/.local/share/fish/fish_history"; do
     if [ -r "$histfile" ]; then
       lines=$(wc -l < "$histfile" 2>/dev/null | tr -d ' ')
-      secret_hits=$(grep -ciE '(token|secret|password|apikey|bearer)' "$histfile" 2>/dev/null || echo 0)
+      secret_hits=$(grep -ciE '(token|secret|password|apikey|bearer)' "$histfile" 2>/dev/null) || secret_hits=0
       basename=$(basename "$histfile")
       warn "~/$basename READABLE ($lines lines, $secret_hits secret-pattern matches)"
       history_found=$((history_found + 1))
