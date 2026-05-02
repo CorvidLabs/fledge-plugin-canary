@@ -555,6 +555,171 @@ run_baseline_tests() {
     warn "Can write to /tmp (no capability needed)"
   fi
 
+  # Test 6: Credential files (no exec RPC needed)
+  send "{\"type\":\"output\",\"text\":\"\\n  ── Credential file access ──\\n\"}"
+  cred_count=0
+
+  # AWS
+  if [ -r "$HOME/.aws/credentials" ]; then
+    warn "~/.aws/credentials READABLE — AWS keys exposed"
+    cred_count=$((cred_count + 1))
+  fi
+  if [ -r "$HOME/.aws/config" ]; then
+    warn "~/.aws/config READABLE — AWS account/region info exposed"
+    cred_count=$((cred_count + 1))
+  fi
+
+  # Docker
+  if [ -r "$HOME/.docker/config.json" ]; then
+    has_auth=$(grep -c '"auth"' "$HOME/.docker/config.json" 2>/dev/null || echo 0)
+    if [ "$has_auth" -gt 0 ]; then
+      warn "~/.docker/config.json READABLE with $has_auth auth entries"
+    else
+      send "{\"type\":\"output\",\"text\":\"  ✓ ~/.docker/config.json readable but no auth entries\\n\"}"
+    fi
+    cred_count=$((cred_count + 1))
+  fi
+
+  # Kubernetes
+  if [ -r "$HOME/.kube/config" ]; then
+    warn "~/.kube/config READABLE — cluster credentials exposed"
+    cred_count=$((cred_count + 1))
+  fi
+
+  # npm
+  if [ -r "$HOME/.npmrc" ]; then
+    has_token=$(grep -ciE '(token|_auth)' "$HOME/.npmrc" 2>/dev/null || echo 0)
+    if [ "$has_token" -gt 0 ]; then
+      warn "~/.npmrc READABLE with $has_token token/auth lines"
+    else
+      send "{\"type\":\"output\",\"text\":\"  ✓ ~/.npmrc readable but no tokens\\n\"}"
+    fi
+    cred_count=$((cred_count + 1))
+  fi
+
+  # .netrc (often has GitHub tokens)
+  if [ -r "$HOME/.netrc" ]; then
+    warn "~/.netrc READABLE — may contain GitHub/API passwords"
+    cred_count=$((cred_count + 1))
+  fi
+
+  # GitHub CLI
+  if [ -r "$HOME/.config/gh/hosts.yml" ]; then
+    warn "~/.config/gh/hosts.yml READABLE — GitHub CLI oauth token exposed"
+    cred_count=$((cred_count + 1))
+  fi
+
+  # Git credentials file
+  if [ -r "$HOME/.git-credentials" ]; then
+    warn "~/.git-credentials READABLE — plaintext Git passwords"
+    cred_count=$((cred_count + 1))
+  fi
+
+  # GPG
+  if [ -d "$HOME/.gnupg" ] && ls "$HOME/.gnupg/" &>/dev/null; then
+    warn "~/.gnupg/ listable — GPG keyring accessible"
+    cred_count=$((cred_count + 1))
+  fi
+
+  # Project .env files
+  for envfile in .env .env.local .env.production .env.development; do
+    if [ -r "$envfile" ]; then
+      secret_lines=$(grep -ciE '(token|secret|key|password|credential|api)' "$envfile" 2>/dev/null || echo 0)
+      warn "$envfile READABLE ($secret_lines sensitive-looking lines)"
+      cred_count=$((cred_count + 1))
+    fi
+  done
+
+  if [ "$cred_count" -eq 0 ]; then
+    pass "No common credential files found readable"
+  else
+    send "{\"type\":\"output\",\"text\":\"  ($cred_count credential sources accessible — no capability needed)\\n\"}"
+  fi
+
+  # Test 7: Shell history (often contains pasted secrets/tokens)
+  send "{\"type\":\"output\",\"text\":\"\\n  ── Shell history ──\\n\"}"
+  history_found=0
+  for histfile in "$HOME/.zsh_history" "$HOME/.bash_history" "$HOME/.local/share/fish/fish_history"; do
+    if [ -r "$histfile" ]; then
+      lines=$(wc -l < "$histfile" 2>/dev/null | tr -d ' ')
+      secret_hits=$(grep -ciE '(token|secret|password|apikey|bearer)' "$histfile" 2>/dev/null || echo 0)
+      basename=$(basename "$histfile")
+      warn "~/$basename READABLE ($lines lines, $secret_hits secret-pattern matches)"
+      history_found=$((history_found + 1))
+    fi
+  done
+  if [ "$history_found" -eq 0 ]; then
+    pass "No shell history files readable"
+  fi
+
+  # Test 8: Clipboard (macOS)
+  send "{\"type\":\"output\",\"text\":\"\\n  ── Clipboard access ──\\n\"}"
+  if command -v pbpaste &>/dev/null; then
+    clip_len=$(pbpaste 2>/dev/null | wc -c | tr -d ' ')
+    if [ "$clip_len" -gt 0 ]; then
+      warn "pbpaste accessible — clipboard has $clip_len bytes (could contain passwords)"
+    else
+      pass "Clipboard empty"
+    fi
+  else
+    pass "pbpaste not available (not macOS or not installed)"
+  fi
+
+  # Test 9: Persistence vectors
+  send "{\"type\":\"output\",\"text\":\"\\n  ── Persistence vectors (can a plugin backdoor you?) ──\\n\"}"
+  persist_count=0
+
+  # Git hooks
+  if [ -d ".git/hooks" ] && [ -w ".git/hooks" ]; then
+    warn ".git/hooks/ writable — can inject code into git commit/push/merge"
+    persist_count=$((persist_count + 1))
+  fi
+
+  # Shell RC files
+  for rcfile in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.bash_profile" "$HOME/.zprofile"; do
+    if [ -w "$rcfile" ]; then
+      basename=$(basename "$rcfile")
+      warn "~/$basename writable — can backdoor shell startup"
+      persist_count=$((persist_count + 1))
+      break  # one is enough to prove the point
+    fi
+  done
+
+  # macOS LaunchAgents
+  if [ -d "$HOME/Library/LaunchAgents" ] && [ -w "$HOME/Library/LaunchAgents" ]; then
+    warn "~/Library/LaunchAgents/ writable — can install persistent macOS daemon"
+    persist_count=$((persist_count + 1))
+  fi
+
+  # Crontab
+  if command -v crontab &>/dev/null; then
+    warn "crontab available — can schedule persistent exfiltration"
+    persist_count=$((persist_count + 1))
+  fi
+
+  if [ "$persist_count" -eq 0 ]; then
+    pass "No persistence vectors found"
+  else
+    send "{\"type\":\"output\",\"text\":\"  ($persist_count persistence vectors — no capability needed)\\n\"}"
+  fi
+
+  # Test 10: Process and system info
+  send "{\"type\":\"output\",\"text\":\"\\n  ── System reconnaissance ──\\n\"}"
+  if command -v ps &>/dev/null; then
+    proc_count=$(ps aux 2>/dev/null | wc -l | tr -d ' ')
+    send "{\"type\":\"output\",\"text\":\"  ps aux: $proc_count processes visible\\n\"}"
+  fi
+  send "{\"type\":\"output\",\"text\":\"  whoami: $(whoami 2>/dev/null || echo unknown)\\n\"}"
+  send "{\"type\":\"output\",\"text\":\"  hostname: $(hostname 2>/dev/null || echo unknown)\\n\"}"
+  if [ -n "$project_root" ]; then
+    send "{\"type\":\"output\",\"text\":\"  user home: $HOME\\n\"}"
+  fi
+
+  # DNS exfiltration check (even if curl is blocked, DNS works)
+  if command -v dig &>/dev/null || command -v nslookup &>/dev/null; then
+    warn "DNS tools available — data can be exfiltrated via DNS queries even without curl"
+  fi
+
   send "{\"type\":\"output\",\"text\":\"\\n  ── TAKEAWAY ──\\n\"}"
   send "{\"type\":\"output\",\"text\":\"  Capabilities gate the fledge-v1 RPC only. The plugin process itself\\n\"}"
   send "{\"type\":\"output\",\"text\":\"  is an unsandboxed subprocess with full user access.\\n\"}"
