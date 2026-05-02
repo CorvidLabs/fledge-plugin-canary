@@ -37,7 +37,7 @@ case "$ARGS" in
   *) SECTION="all" ;;
 esac
 
-send "{\"type\":\"output\",\"text\":\"fledge-plugin-canary v0.1.0\\n\"}"
+send "{\"type\":\"output\",\"text\":\"fledge-plugin-canary v0.2.1\\n\"}"
 send "{\"type\":\"output\",\"text\":\"Capabilities granted: exec=$HAS_EXEC store=$HAS_STORE metadata=$HAS_METADATA\\n\"}"
 send "{\"type\":\"output\",\"text\":\"Running section: $SECTION\\n\"}"
 
