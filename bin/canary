@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2088  # Tilde in quotes is intentional — display strings, not path expansion
 set -euo pipefail
 
 # fledge-plugin-canary — first-party security audit tool
@@ -241,7 +242,6 @@ run_exec_tests() {
 
   # Test 6: Can we write to the plugin directory?
   mid=$(next_id)
-  plugin_dir=$(echo "$INIT" | jq -r '.plugin.dir // ""')
   send "{\"type\":\"exec\",\"id\":\"$mid\",\"command\":\"touch /tmp/canary-write-test && rm /tmp/canary-write-test && echo __OK__\"}"
   resp=$(recv)
   stdout=$(echo "$resp" | jq -r '.value.stdout // empty')
@@ -519,7 +519,8 @@ run_baseline_tests() {
   fi
 
   if [ -d "$HOME/.ssh" ]; then
-    ssh_files=$(ls "$HOME/.ssh/" 2>/dev/null | tr '\n' ', ')
+    # shellcheck disable=SC2012
+    ssh_files=$(find "$HOME/.ssh/" -maxdepth 1 -printf '%f, ' 2>/dev/null || ls "$HOME/.ssh/" 2>/dev/null | tr '\n' ', ')
     if [ -n "$ssh_files" ]; then
       warn "~/.ssh/ listable: $ssh_files"
     fi

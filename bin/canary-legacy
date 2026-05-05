@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2088  # Tilde in quotes is intentional — display strings, not path expansion
 set -euo pipefail
 
 # fledge-plugin-canary legacy mode
 # Shows what a plugin's bash process can see WITHOUT using any RPC capabilities.
 # This wraps output in fledge-v1 JSON so it actually renders.
 
-send() { echo "{\"type\":\"output\",\"text\":\"$1\\n\"}"; }
+send() { printf '%s\n' "{\"type\":\"output\",\"text\":\"$1\\n\"}"; }
 recv() { read -r line; echo "$line"; }
 
 # Read and discard the init message (required by protocol)
-INIT=$(recv)
+_init=$(recv)
 
 send "=== CANARY LEGACY MODE ==="
 send "Shows what the plugin process inherits from the parent shell."
