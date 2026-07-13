@@ -17,10 +17,10 @@ Address valid rollout review and strict documentation findings
 
 ## Acceptance Criteria
 
-- Generated guidance is structurally correct
+- Generated guidance and lifecycle path coverage are structurally correct
 - review findings are addressed
 - and Canary ShellCheck remains green.
 
 ## No-spec Rationale
 
-Generated agent guidance places companion-file instructions under the correct section without changing Canary behavior.
+Generated agent commands, section labels, command names, and lifecycle path coverage are corrected without changing Canary behavior.
