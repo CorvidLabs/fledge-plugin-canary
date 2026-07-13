@@ -1,0 +1,11 @@
+{
+  "approvals": [
+    {
+      "gate": "definition",
+      "actor": "user:0xLeif",
+      "timestamp": 1783958618,
+      "digest": "2fa6fac22f43e49f869b7258a43a66a1deb15d2173fbace4a568945e94f33c2c",
+      "note": "Definition approval for the reviewed Gemini command-safety correction: intent remains one untrusted argv value and shell-safe quoting is required."
+    }
+  ]
+}
