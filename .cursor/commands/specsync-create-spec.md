@@ -3,7 +3,8 @@ Create a new spec-sync module spec.
 Arguments: $ARGUMENTS
 
 1. Remove `--minimal` from the arguments if present and remember that minimal
-   mode was requested. Keep the entire remaining input intact.
+   mode was requested. Keep the entire remaining input intact after trimming
+   leading and trailing whitespace.
 2. Classify the entire remaining input before choosing a module name. It will be one of:
    - **A bare module name** — a short identifier like `auth-service` or
      `billing`. Use it as-is.
