@@ -48,6 +48,13 @@
       "timestamp": 1783958695,
       "digest": "89e3e827dc138058a0c54c4f67c439adae97b2df8d569c725d0d4be55ecc1f10",
       "note": "Accepted after fresh verification against the final five-change Canary workspace."
+    },
+    {
+      "gate": "definition",
+      "actor": "user:0xLeif",
+      "timestamp": 1783958763,
+      "digest": "30ef73e6ba3dcb93b9087a216ed9254dff4478ffe432352c3eca0a740bd07bfd",
+      "note": "Fresh definition approval after the authorized lifecycle reset against the final reviewed Canary command-safety artifacts; prior approval history is preserved."
     }
   ]
 }

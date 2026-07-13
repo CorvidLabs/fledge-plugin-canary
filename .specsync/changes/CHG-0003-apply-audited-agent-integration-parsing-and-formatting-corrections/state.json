@@ -5,10 +5,10 @@
   "title": "Apply audited agent-integration parsing and formatting corrections",
   "description": "Apply audited agent-integration parsing and formatting corrections",
   "kind": "documentation",
-  "state": "accepted",
+  "state": "implementing",
   "base_commit": "f597526a8e16108e34c77776a0ecc39890c30c80",
   "created_at": 1783954515,
-  "updated_at": 1783958695,
+  "updated_at": 1783958763,
   "affected_specs": [],
   "affected_paths": [
     ".claude/commands/specsync/create-spec.md",
