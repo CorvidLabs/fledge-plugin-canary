@@ -1,6 +1,6 @@
 ---
 id: CHG-0001-adopt-specsync-5-0-1-and-trust-1-0-0-governance-for-the-native-canary-fledge-plu
-state: draft
+state: accepted
 type: migration
 base_commit: d16a8e6fd794e38c295db2541ec5b6ab54c5906b
 ---
@@ -13,7 +13,7 @@ Adopt SpecSync 5.0.1 and Trust 1.0.0 governance for the native Canary Fledge plu
 
 ## Affected Canonical Specs
 
-- `canary`
+- None
 
 ## Acceptance Criteria
 
@@ -21,4 +21,4 @@ Adopt SpecSync 5.0.1 and Trust 1.0.0 governance for the native Canary Fledge plu
 
 ## No-spec Rationale
 
-Not applicable
+This governance adoption documents existing Canary outcomes and verification policy without changing security or runtime semantics.
