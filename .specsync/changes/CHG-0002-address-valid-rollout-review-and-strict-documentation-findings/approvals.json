@@ -48,6 +48,13 @@
       "timestamp": 1783957827,
       "digest": "5c405a151932649f9e068ecfbc88f5ce8d31c8937d4a7403d20363f4662775cd",
       "note": "Fresh closing approval under explicit audit-risk authorization after re-verification against the final accepted review-correction workspace."
+    },
+    {
+      "gate": "definition",
+      "actor": "user:0xLeif",
+      "timestamp": 1783958344,
+      "digest": "c393290284426630b146f6d984a39ea9f1f113e74a014d77e612eccdc400578a",
+      "note": "Fresh definition approval after the authorized state-only reopen against the final reviewed Canary workspace; prior approval history is preserved."
     }
   ]
 }
