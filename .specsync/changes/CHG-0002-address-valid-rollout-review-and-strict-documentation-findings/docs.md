@@ -5,4 +5,6 @@ artifact: docs
 
 # Docs
 
-Place companion-file instructions immediately under the Companion files heading in all tracked agent integrations.
+Place companion-file instructions immediately under the Companion files heading
+in the Claude, Codex, Cursor, and Gemini integrations. Treat all four generated
+guidance directories as meaningful SpecSync lifecycle paths.
