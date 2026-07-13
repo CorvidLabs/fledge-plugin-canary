@@ -13,6 +13,13 @@
       "timestamp": 1783958763,
       "digest": "cd143c8e1aef48273298cd83affdce0a6fd5f23c7eb24b4985527736ce5a427f",
       "note": "Fresh definition approval after the authorized lifecycle reset against the final reviewed Canary command-safety artifacts; prior approval history is preserved."
+    },
+    {
+      "gate": "acceptance",
+      "actor": "user:0xLeif",
+      "timestamp": 1783958779,
+      "digest": "78ff558f1ad9424a0dd176fa029f8f014688276a6ea4054bdb1ed5610440d545",
+      "note": "Accepted after fresh verification that Gemini treats raw intent as one safely quoted argument rather than literal shell syntax."
     }
   ]
 }

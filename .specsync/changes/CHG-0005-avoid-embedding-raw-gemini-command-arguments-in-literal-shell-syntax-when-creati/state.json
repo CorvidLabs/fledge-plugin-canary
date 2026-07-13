@@ -5,10 +5,10 @@
   "title": "Avoid embedding raw Gemini command arguments in literal shell syntax when creating an SDD change",
   "description": "Avoid embedding raw Gemini command arguments in literal shell syntax when creating an SDD change",
   "kind": "bug_fix",
-  "state": "implementing",
+  "state": "accepted",
   "base_commit": "41021dd288507888a55513bca7e2a42f6eb6af77",
   "created_at": 1783958566,
-  "updated_at": 1783958763,
+  "updated_at": 1783958779,
   "affected_specs": [],
   "affected_paths": [
     ".gemini/commands/specsync/create-change.toml"

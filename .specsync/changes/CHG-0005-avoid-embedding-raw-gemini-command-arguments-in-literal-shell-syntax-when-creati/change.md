@@ -1,6 +1,6 @@
 ---
 id: CHG-0005-avoid-embedding-raw-gemini-command-arguments-in-literal-shell-syntax-when-creati
-state: implementing
+state: accepted
 type: bug_fix
 base_commit: 41021dd288507888a55513bca7e2a42f6eb6af77
 ---
