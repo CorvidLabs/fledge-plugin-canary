@@ -41,6 +41,13 @@
       "timestamp": 1783957193,
       "digest": "d7b8664001e7d6e611b5f02ac45ec4214629cb30c215dd043e4ebd4bd837858c",
       "note": "Fresh definition approval under explicit audit-risk authorization; prior approval history preserved and current corrected artifacts reviewed."
+    },
+    {
+      "gate": "acceptance",
+      "actor": "user:0xLeif",
+      "timestamp": 1783957827,
+      "digest": "5c405a151932649f9e068ecfbc88f5ce8d31c8937d4a7403d20363f4662775cd",
+      "note": "Fresh closing approval under explicit audit-risk authorization after re-verification against the final accepted review-correction workspace."
     }
   ]
 }

@@ -13,6 +13,13 @@
       "timestamp": 1783957606,
       "digest": "30ef73e6ba3dcb93b9087a216ed9254dff4478ffe432352c3eca0a740bd07bfd",
       "note": "Fresh definition approval after the authorized truthful completion-task correction for audited integration guidance."
+    },
+    {
+      "gate": "acceptance",
+      "actor": "user:0xLeif",
+      "timestamp": 1783957756,
+      "digest": "f0da189972e48999241f982a9aabf978489dbe09df945884ac34f0b078cdbad7",
+      "note": "Closing approval recorded after committed-head native verification of the audited no-semantic-change correction."
     }
   ]
 }
