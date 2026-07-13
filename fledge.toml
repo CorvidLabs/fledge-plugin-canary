@@ -1,0 +1,7 @@
+# fledge.toml: project task definitions
+[tasks]
+lint = "shellcheck bin/canary bin/canary-legacy"
+
+[lanes.verify]
+description = "Statically validate both native Canary executables"
+steps = ["lint"]
