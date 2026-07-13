@@ -1,6 +1,6 @@
 ---
 id: CHG-0004-address-canary-review-findings-by-governing-generated-agent-guidance-and-complet
-state: accepted
+state: implementing
 type: documentation
 base_commit: cc628f1bda8c8d5ab58f265aa16319cb2377d2fc
 ---

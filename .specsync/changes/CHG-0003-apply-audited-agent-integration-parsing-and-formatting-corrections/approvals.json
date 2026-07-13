@@ -34,6 +34,13 @@
       "timestamp": 1783958381,
       "digest": "bd9458ddf719d100e374d5cb9e0553cb71aaed6377d624da309e5d8a5829c1d3",
       "note": "Accepted after fresh verification of the final audited agent-integration corrections."
+    },
+    {
+      "gate": "definition",
+      "actor": "user:0xLeif",
+      "timestamp": 1783958663,
+      "digest": "30ef73e6ba3dcb93b9087a216ed9254dff4478ffe432352c3eca0a740bd07bfd",
+      "note": "Fresh definition approval after the authorized state-only reopen against the final Canary command-safety correction; prior approval history is preserved."
     }
   ]
 }

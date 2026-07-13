@@ -62,6 +62,13 @@
       "timestamp": 1783958380,
       "digest": "de1cfc2ea0bf590fa352d827a71a86ca072d3e5c8d134cdd8375dcb248c2473e",
       "note": "Accepted after fresh verification of the expanded four-agent and lifecycle-coverage documentation."
+    },
+    {
+      "gate": "definition",
+      "actor": "user:0xLeif",
+      "timestamp": 1783958663,
+      "digest": "c393290284426630b146f6d984a39ea9f1f113e74a014d77e612eccdc400578a",
+      "note": "Fresh definition approval after the authorized state-only reopen against the final Canary command-safety correction; prior approval history is preserved."
     }
   ]
 }
