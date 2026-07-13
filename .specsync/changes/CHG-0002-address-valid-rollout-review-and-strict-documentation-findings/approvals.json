@@ -13,6 +13,83 @@
       "timestamp": 1783948261,
       "digest": "ce8fb308ce2759e46ff3ee096974fd1b19ca0d21c575898498538e42d4f4573a",
       "note": "Authorized non-semantic review corrections verified successfully; prior approval history preserved and hosted CI remains pending."
+    },
+    {
+      "gate": "definition",
+      "actor": "user:0xLeif",
+      "timestamp": 1783952048,
+      "digest": "a193279a9bb6d0427512765386d97970efb3f58634db6678611bd6ed8238d668",
+      "note": "Fresh definition approval for the user-authorized audited reopen after valid non-semantic review corrections; prior approval history preserved."
+    },
+    {
+      "gate": "definition",
+      "actor": "user:0xLeif",
+      "timestamp": 1783953099,
+      "digest": "d7b8664001e7d6e611b5f02ac45ec4214629cb30c215dd043e4ebd4bd837858c",
+      "note": "Fresh definition approval for validated non-semantic review corrections; all prior approval history is preserved."
+    },
+    {
+      "gate": "acceptance",
+      "actor": "user:0xLeif",
+      "timestamp": 1783953160,
+      "digest": "53aaa7746ac01995f7c7ba78afb295d45a3c162258a507b74984af94760bb272",
+      "note": "Fresh closing approval after committed-head native verification of the authorized non-semantic review corrections."
+    },
+    {
+      "gate": "definition",
+      "actor": "user:0xLeif",
+      "timestamp": 1783957193,
+      "digest": "d7b8664001e7d6e611b5f02ac45ec4214629cb30c215dd043e4ebd4bd837858c",
+      "note": "Fresh definition approval under explicit audit-risk authorization; prior approval history preserved and current corrected artifacts reviewed."
+    },
+    {
+      "gate": "acceptance",
+      "actor": "user:0xLeif",
+      "timestamp": 1783957827,
+      "digest": "5c405a151932649f9e068ecfbc88f5ce8d31c8937d4a7403d20363f4662775cd",
+      "note": "Fresh closing approval under explicit audit-risk authorization after re-verification against the final accepted review-correction workspace."
+    },
+    {
+      "gate": "definition",
+      "actor": "user:0xLeif",
+      "timestamp": 1783958344,
+      "digest": "c393290284426630b146f6d984a39ea9f1f113e74a014d77e612eccdc400578a",
+      "note": "Fresh definition approval after the authorized state-only reopen against the final reviewed Canary workspace; prior approval history is preserved."
+    },
+    {
+      "gate": "acceptance",
+      "actor": "user:0xLeif",
+      "timestamp": 1783958380,
+      "digest": "de1cfc2ea0bf590fa352d827a71a86ca072d3e5c8d134cdd8375dcb248c2473e",
+      "note": "Accepted after fresh verification of the expanded four-agent and lifecycle-coverage documentation."
+    },
+    {
+      "gate": "definition",
+      "actor": "user:0xLeif",
+      "timestamp": 1783958663,
+      "digest": "c393290284426630b146f6d984a39ea9f1f113e74a014d77e612eccdc400578a",
+      "note": "Fresh definition approval after the authorized state-only reopen against the final Canary command-safety correction; prior approval history is preserved."
+    },
+    {
+      "gate": "acceptance",
+      "actor": "user:0xLeif",
+      "timestamp": 1783958694,
+      "digest": "2c5e2d482f5059bad6962156e6032c753d43550b2250e852f553cdabf5cc9811",
+      "note": "Accepted after fresh verification against the final five-change Canary workspace."
+    },
+    {
+      "gate": "definition",
+      "actor": "user:0xLeif",
+      "timestamp": 1783958762,
+      "digest": "c393290284426630b146f6d984a39ea9f1f113e74a014d77e612eccdc400578a",
+      "note": "Fresh definition approval after the authorized lifecycle reset against the final reviewed Canary command-safety artifacts; prior approval history is preserved."
+    },
+    {
+      "gate": "acceptance",
+      "actor": "user:0xLeif",
+      "timestamp": 1783958777,
+      "digest": "bee2c15e29d18eea21d1a89fea952c71f04a644acc9c5d39aae474f6a9b0e979",
+      "note": "Accepted after fresh verification against the final five-change Canary workspace."
     }
   ]
 }

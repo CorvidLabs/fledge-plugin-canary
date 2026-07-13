@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "id": "CHG-0004-address-canary-review-findings-by-governing-generated-agent-guidance-and-complet",
+  "slug": "address-canary-review-findings-by-governing-generated-agent-guidance-and-complet",
+  "title": "Address Canary review findings by governing generated agent guidance and completing CHG2 lifecycle documentation for Gemini and SDD coverage",
+  "description": "Address Canary review findings by governing generated agent guidance and completing CHG2 lifecycle documentation for Gemini and SDD coverage",
+  "kind": "documentation",
+  "state": "accepted",
+  "base_commit": "cc628f1bda8c8d5ab58f265aa16319cb2377d2fc",
+  "created_at": 1783958174,
+  "updated_at": 1783958778,
+  "affected_specs": [],
+  "affected_paths": [
+    ".specsync/sdd.json",
+    ".specsync/changes/CHG-0002-address-valid-rollout-review-and-strict-documentation-findings/context.md",
+    ".specsync/changes/CHG-0002-address-valid-rollout-review-and-strict-documentation-findings/docs.md"
+  ],
+  "no_spec_change": true,
+  "no_spec_change_rationale": "This closes governance and lifecycle-documentation gaps without changing Canary runtime behavior or its canonical native plugin contract.",
+  "acceptance_criteria": [
+    "Generated Claude, Codex, Cursor, and Gemini guidance directories are governed as meaningful paths",
+    "CHG2 context and docs truthfully describe Gemini guidance and SDD lifecycle coverage",
+    "Strict SpecSync and the native verification lane pass"
+  ],
+  "selected_artifacts": [
+    "context",
+    "docs"
+  ],
+  "dependencies": [],
+  "answers": {
+    "architecture_risk": "no",
+    "public_contract": "no"
+  }
+}

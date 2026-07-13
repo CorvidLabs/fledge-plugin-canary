@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "id": "CHG-0003-apply-audited-agent-integration-parsing-and-formatting-corrections",
+  "slug": "apply-audited-agent-integration-parsing-and-formatting-corrections",
+  "title": "Apply audited agent-integration parsing and formatting corrections",
+  "description": "Apply audited agent-integration parsing and formatting corrections",
+  "kind": "documentation",
+  "state": "accepted",
+  "base_commit": "f597526a8e16108e34c77776a0ecc39890c30c80",
+  "created_at": 1783954515,
+  "updated_at": 1783958778,
+  "affected_specs": [],
+  "affected_paths": [
+    ".claude/commands/specsync/create-spec.md",
+    ".cursor/commands/specsync-create-spec.md",
+    ".gemini/commands/specsync/create-spec.toml",
+    ".claude/skills/spec-sync/SKILL.md",
+    ".codex/skills/spec-sync/SKILL.md",
+    ".cursor/skills/spec-sync/SKILL.md",
+    ".gemini/skills/spec-sync/SKILL.md"
+  ],
+  "no_spec_change": true,
+  "no_spec_change_rationale": "The corrections only clarify generated agent command parsing and Markdown file-name formatting; canonical Canary behavior and requirements do not change.",
+  "acceptance_criteria": [
+    "All three create-spec command integrations explicitly trim surrounding input whitespace and all four skills format the requirements.md companion name consistently."
+  ],
+  "selected_artifacts": [
+    "context",
+    "docs",
+    "design",
+    "tasks"
+  ],
+  "dependencies": [],
+  "answers": {
+    "architecture_risk": "no",
+    "public_contract": "no"
+  }
+}

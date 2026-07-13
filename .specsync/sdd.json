@@ -7,6 +7,10 @@
     "tests/",
     "site/",
     ".github/",
+    ".claude/",
+    ".codex/",
+    ".cursor/",
+    ".gemini/",
     "Cargo.toml",
     "Cargo.lock",
     "action.yml",
@@ -22,6 +26,13 @@
     "pyproject.toml",
     "uv.lock",
     "requirements.txt",
+    ".augur.toml",
+    ".attest.json",
+    "fledge.toml",
+    ".trust.toml",
+    "plugin.toml",
+    "README.md",
+    "docs/",
     ".specsync/sdd.json",
     ".specsync/config.toml",
     ".specsync/config.json",
@@ -29,7 +40,8 @@
     "bin/"
   ],
   "ignored_paths": [
-    ".specsync/",
+    ".specsync/changes/",
+    ".specsync/adoption-report.json",
     "specs/"
   ],
   "verification_commands": [
