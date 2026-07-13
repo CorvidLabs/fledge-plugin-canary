@@ -1,6 +1,6 @@
 ---
 id: CHG-0003-apply-audited-agent-integration-parsing-and-formatting-corrections
-state: implementing
+state: accepted
 type: documentation
 base_commit: f597526a8e16108e34c77776a0ecc39890c30c80
 ---

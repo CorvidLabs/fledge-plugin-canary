@@ -5,10 +5,10 @@
   "title": "Address Canary review findings by governing generated agent guidance and completing CHG2 lifecycle documentation for Gemini and SDD coverage",
   "description": "Address Canary review findings by governing generated agent guidance and completing CHG2 lifecycle documentation for Gemini and SDD coverage",
   "kind": "documentation",
-  "state": "implementing",
+  "state": "accepted",
   "base_commit": "cc628f1bda8c8d5ab58f265aa16319cb2377d2fc",
   "created_at": 1783958174,
-  "updated_at": 1783958344,
+  "updated_at": 1783958381,
   "affected_specs": [],
   "affected_paths": [
     ".specsync/sdd.json",
