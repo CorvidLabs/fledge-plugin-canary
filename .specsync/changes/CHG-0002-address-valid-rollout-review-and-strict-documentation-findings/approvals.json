@@ -13,6 +13,13 @@
       "timestamp": 1783948261,
       "digest": "ce8fb308ce2759e46ff3ee096974fd1b19ca0d21c575898498538e42d4f4573a",
       "note": "Authorized non-semantic review corrections verified successfully; prior approval history preserved and hosted CI remains pending."
+    },
+    {
+      "gate": "definition",
+      "actor": "user:0xLeif",
+      "timestamp": 1783952048,
+      "digest": "a193279a9bb6d0427512765386d97970efb3f58634db6678611bd6ed8238d668",
+      "note": "Fresh definition approval for the user-authorized audited reopen after valid non-semantic review corrections; prior approval history preserved."
     }
   ]
 }
