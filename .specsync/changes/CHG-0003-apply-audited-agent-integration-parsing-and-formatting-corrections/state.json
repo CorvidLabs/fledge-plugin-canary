@@ -8,7 +8,7 @@
   "state": "implementing",
   "base_commit": "f597526a8e16108e34c77776a0ecc39890c30c80",
   "created_at": 1783954515,
-  "updated_at": 1783957193,
+  "updated_at": 1783957606,
   "affected_specs": [],
   "affected_paths": [
     ".claude/commands/specsync/create-spec.md",
